@@ -109,6 +109,11 @@ synStatus createStream(synDeviceId deviceId, C_Stream* stream) {
 }
 
 synStatus destroyStream(synDeviceId deviceId, C_Stream stream) {
+  const auto& existstream = streamMap.find(deviceId);
+  if (existstream == streamMap.end()) {
+    LOG(INFO) << "can't find stream from record and return directly";
+    return synSuccess;
+  }
 
   synStatus status = synStreamDestroy(stream->memcpyStreamDevToHost);
   if (status != synSuccess) return status;
@@ -124,6 +129,16 @@ synStatus destroyStream(synDeviceId deviceId, C_Stream stream) {
     if (hpustream->second == stream)
       streamMap.erase(hpustream);
   }
+  return status;
+}
+
+synStatus queryStream(synDeviceId deviceId, C_Stream stream) {
+
+  synStatus status = synStreamQuery(stream->memcpyStreamDevToHost);
+  if (status != synSuccess) return status;
+  status = synStreamQuery(stream->memcpyStreamHostToDev);
+  if (status != synSuccess) return status;
+  status = synStreamQuery(stream->computeStream);
   return status;
 }
 
@@ -146,6 +161,12 @@ synStatus destroyEvent(synDeviceId deviceId, C_Event event) {
   synStatus status = synEventDestroy(event->eventHandle);
 
   delete event;
+  return status;
+}
+
+synStatus queryEvent(synDeviceId deviceId, C_Event event) {
+  synStatus status = synEventQuery(event->eventHandle);
+
   return status;
 }
 

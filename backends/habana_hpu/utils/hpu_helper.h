@@ -27,6 +27,7 @@ struct C_Stream_st {
 
 synStatus createStream(synDeviceId deviceId, C_Stream *stream);
 synStatus destroyStream(synDeviceId deviceId, C_Stream stream);
+synStatus queryStream(synDeviceId deviceId, C_Stream stream);
 
 struct C_Event_st {
   synEventHandle  eventHandle;
@@ -35,4 +36,5 @@ struct C_Event_st {
 synStatus createEvent(synDeviceId deviceId, C_Event *event);
 synStatus recordEvent(synDeviceId deviceId, C_Stream stream, C_Event event);
 synStatus destroyEvent(synDeviceId deviceId, C_Event event);
+synStatus queryEvent(synDeviceId deviceId, C_Event event);
 void resetTensorSections();

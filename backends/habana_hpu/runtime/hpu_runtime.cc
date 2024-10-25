@@ -317,6 +317,29 @@ C_Status DestroyStream(const C_Device device, C_Stream stream) {
   return C_SUCCESS;
 }
 
+C_Status QueryStream(const C_Device device, C_Stream stream) {
+  FUNCALL_S
+  LOG(INFO) << "device id=" << device->id << " stream=" << stream;
+
+  synStatus status = queryStream(device->id, stream);
+  CHKSTATUS("queryStream failed!");
+
+  FUNCALL_E
+  return C_SUCCESS;
+}
+
+C_Status AddCallback(const C_Device device, C_Stream stream,
+                     C_Callback callback, void *user_data) {
+  FUNCALL_S
+  LOG(INFO) << "device id=" << device->id << " stream=" << stream;
+
+  C_Status ret = C_SUCCESS;
+  callback(device, stream, user_data, &ret);
+
+  FUNCALL_E
+  return ret;
+}
+
 C_Status CreateEvent(const C_Device device, C_Event *event) {
   FUNCALL_S
   synStatus status = createEvent(device->id, event);
@@ -343,6 +366,16 @@ C_Status DestroyEvent(const C_Device device, C_Event event) {
   LOG(INFO) << "device id=" << device->id << " event=" << event;
   synStatus status = destroyEvent(device->id, event);
   CHKSTATUS("destroyEvent failed!");
+
+  FUNCALL_E
+  return C_SUCCESS;
+}
+
+C_Status QueryEvent(const C_Device device, C_Event event) {
+  FUNCALL_S
+  LOG(INFO) << "device id=" << device->id << " event=" << event;
+  synStatus status = queryEvent(device->id, event);
+  CHKSTATUS("queryEvent failed!");
 
   FUNCALL_E
   return C_SUCCESS;
@@ -539,10 +572,13 @@ void InitPlugin(CustomRuntimeParams *params) {
 
   params->interface->create_stream = CreateStream;
   params->interface->destroy_stream = DestroyStream;
+  params->interface->query_stream = QueryStream;
+  params->interface->stream_add_callback = AddCallback;
 
   params->interface->create_event = CreateEvent;
   params->interface->destroy_event = DestroyEvent;
   params->interface->record_event = RecordEvent;
+  params->interface->query_event = QueryEvent;
 
   params->interface->synchronize_device = SyncDevice;
   params->interface->synchronize_stream = SyncStream;
