@@ -1334,6 +1334,127 @@ C_Status ProfilerCollectData(C_Profiler prof,
   return C_SUCCESS;
 }
 
+C_Status CudaStreamBeginCapture(const C_Device device,
+                                C_Stream stream,
+                                C_StreamCaptureMode mode) {
+  std::cout << "CudaStreamBeginCapture is called." << std::endl;
+  return C_SUCCESS;
+}
+
+C_Status CudaStreamEndCaptrue(const C_Device device,
+                              C_Stream stream,
+                              C_CudaGraph *pGraph) {
+  std::cout << "CudaStreamEndCaptrue is called." << std::endl;
+  return C_SUCCESS;
+}
+
+C_Status CudaGraphGetNodes(C_CudaGraph graph,
+                           C_CudaGraphNode *pNode,
+                           size_t *numNodes) {
+  std::cout << "CudaGraphGetNodes is called." << std::endl;
+  return C_SUCCESS;
+}
+
+C_Status CudaGraphLaunch(const C_Device device,
+                         C_GraphExec exec,
+                         C_Stream stream) {
+  std::cout << "CudaGraphLaunch is called." << std::endl;
+  return C_SUCCESS;
+}
+
+C_Status CudaGraphDestroy(C_CudaGraph graph) {
+  std::cout << "CudaGraphDestroy is called." << std::endl;
+  return C_SUCCESS;
+}
+
+C_Status CudaGraphExecDestroy(C_GraphExec exec) {
+  std::cout << "CudaGraphExecDestroy is called." << std::endl;
+  return C_SUCCESS;
+}
+
+C_Status CudaGraphInstantiate(C_GraphExec *pExec,
+                              C_CudaGraph *pGraph,
+                              void **pErrorNode,
+                              char *pLogBuffer,
+                              size_t bufferSize) {
+  std::cout << "CudaGraphInstantiate is called." << std::endl;
+  return C_SUCCESS;
+}
+
+C_Status CudaStreamCaptureInfo(const C_Device device,
+                               C_Stream stream,
+                               C_StreamCaptureStatus *captureStatus_out,
+                               unsigned long long *id_out,  // NOLINT
+                               C_CudaGraph *graph_out,
+                               C_CudaGraphNode *dependencies_out,
+                               void **edgeData_out,
+                               size_t *numDependencies_out) {
+  std::cout << "CudaStreamCaptureInfo is called." << std::endl;
+  *captureStatus_out = C_StreamCaptureStatusActive;
+  return C_SUCCESS;
+}
+
+C_Status CudaThreadExchangeStreamCaptureMode(C_StreamCaptureMode *mode) {
+  std::cout << "CudaThreadExchangeStreamCaptureMode is called." << std::endl;
+  return C_SUCCESS;
+}
+
+C_Status CudaGraphDebugDotPrint(C_CudaGraph graph,
+                                const char *path,
+                                unsigned int flags) {
+  std::cout << "CudaGraphDebugDotPrint is called." << std::endl;
+  return C_SUCCESS;
+}
+
+C_Status GetParameterSettersForExecGraph(C_CudaGraph graph,
+                                         C_GraphHookManager *c_hook) {
+  std::cout << "GetParameterSettersForExecGraph is called." << std::endl;
+  return C_SUCCESS;
+}
+
+struct C_BLASHandle_st {};
+
+C_Status InitBlasHandle(const C_Device device,
+                        C_BLASHandle *blas_handle,
+                        C_Stream stream) {
+  std::cout << "InitBlasHandle is called." << std::endl;
+  *blas_handle = new C_BLASHandle_st();
+  return C_SUCCESS;
+}
+
+struct C_BLASLtHandle_st {};
+
+C_Status InitBlasLtHandle(const C_Device device,
+                          C_BLASLtHandle *blaslt_handle) {
+  std::cout << "InitBlasLtHandle is called." << std::endl;
+  *blaslt_handle = new C_BLASLtHandle_st();
+  return C_SUCCESS;
+}
+
+C_Status DestroyBlasLtHandle(const C_Device device,
+                             C_BLASLtHandle blaslt_handle) {
+  std::cout << "DestroyBlasLtHandle is called." << std::endl;
+  if (blaslt_handle) {
+    delete blaslt_handle;
+  }
+  return C_SUCCESS;
+}
+
+C_Status DestroyBlasHandle(const C_Device device, C_BLASHandle blas_handle) {
+  std::cout << "DestroyBlasHandle is called." << std::endl;
+  if (blas_handle) {
+    delete blas_handle;
+  }
+  return C_SUCCESS;
+}
+
+C_Status BlasSetMathMode(const C_Device device,
+                         C_BLASHandle blas_handle,
+                         int math_mode) {
+  std::cout << "BlasSetMathMode is called." << std::endl;
+  return C_SUCCESS;
+}
+
 void InitPlugin(CustomRuntimeParams *params) {
   PADDLE_CUSTOM_RUNTIME_CHECK_VERSION(params);
   params->version.major = 1;
@@ -1404,4 +1525,25 @@ void InitPlugin(CustomRuntimeParams *params) {
   params->interface->profiler_start_tracing = ProfilerStart;
   params->interface->profiler_stop_tracing = ProfilerStop;
   params->interface->profiler_prepare_tracing = ProfilerPrepare;
+
+  // cuda graph apis
+  params->interface->cuda_stream_begin_capture = CudaStreamBeginCapture;
+  params->interface->cuda_stream_end_captrue = CudaStreamEndCaptrue;
+  params->interface->cuda_graph_launch = CudaGraphLaunch;
+  params->interface->cuda_graph_destroy = CudaGraphDestroy;
+  params->interface->cuda_graph_exec_destroy = CudaGraphExecDestroy;
+  params->interface->cuda_graph_instantiate = CudaGraphInstantiate;
+  params->interface->cuda_graph_get_nodes = CudaGraphGetNodes;
+  params->interface->cuda_stream_capture_info = CudaStreamCaptureInfo;
+  params->interface->get_parameter_setter_for_exec_graph =
+      GetParameterSettersForExecGraph;
+  params->interface->cuda_thread_exchange_stream_capthure_mode =
+      CudaThreadExchangeStreamCaptureMode;
+  params->interface->cuda_graph_debug_dot_print = CudaGraphDebugDotPrint;
+
+  params->interface->init_blas_handle = InitBlasHandle;
+  params->interface->init_blaslt_handle = InitBlasLtHandle;
+  params->interface->destroy_blas_handle = DestroyBlasHandle;
+  params->interface->destroy_blaslt_handle = DestroyBlasLtHandle;
+  params->interface->blas_set_math_mode = BlasSetMathMode;
 }
