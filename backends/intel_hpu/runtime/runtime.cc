@@ -691,6 +691,30 @@ class RuntimeManager {
 
 static RuntimeManager runtimeManager;
 
+namespace {
+std::mutex g_capture_state_mutex;
+std::unordered_map<synStreamHandle, C_StreamCaptureStatus> g_capture_states;
+
+void SetCaptureStatus(synStreamHandle handle, C_StreamCaptureStatus status) {
+  if (handle == nullptr) return;
+  std::lock_guard<std::mutex> guard(g_capture_state_mutex);
+  if (status == C_StreamCaptureStatusNone) {
+    g_capture_states.erase(handle);
+  } else {
+    g_capture_states[handle] = status;
+  }
+}
+
+C_StreamCaptureStatus GetCaptureStatus(synStreamHandle handle) {
+  if (handle == nullptr) {
+    return C_StreamCaptureStatusNone;
+  }
+  std::lock_guard<std::mutex> guard(g_capture_state_mutex);
+  auto it = g_capture_states.find(handle);
+  return it == g_capture_states.end() ? C_StreamCaptureStatusNone : it->second;
+}
+}  // namespace
+
 C_Status Init() {
   synStatus status = synInitialize();
   PD_CHECK(status == synSuccess, "[RUNTIME] synInitialize() failed = ", status);
@@ -1338,6 +1362,8 @@ C_Status CudaStreamBeginCapture(const C_Device device,
                                 C_Stream stream,
                                 C_StreamCaptureMode mode) {
   std::cout << "CudaStreamBeginCapture is called." << std::endl;
+  auto handle = reinterpret_cast<synStreamHandle>(stream);
+  SetCaptureStatus(handle, C_StreamCaptureStatusActive);
   return C_SUCCESS;
 }
 
@@ -1345,6 +1371,8 @@ C_Status CudaStreamEndCaptrue(const C_Device device,
                               C_Stream stream,
                               C_CudaGraph *pGraph) {
   std::cout << "CudaStreamEndCaptrue is called." << std::endl;
+  auto handle = reinterpret_cast<synStreamHandle>(stream);
+  SetCaptureStatus(handle, C_StreamCaptureStatusNone);
   return C_SUCCESS;
 }
 
@@ -1391,6 +1419,12 @@ C_Status CudaStreamCaptureInfo(const C_Device device,
                                size_t *numDependencies_out) {
   std::cout << "CudaStreamCaptureInfo is called." << std::endl;
   *captureStatus_out = C_StreamCaptureStatusActive;
+
+  if (captureStatus_out != nullptr) {
+    *captureStatus_out =
+        GetCaptureStatus(reinterpret_cast<synStreamHandle>(stream));
+  }
+
   return C_SUCCESS;
 }
 
