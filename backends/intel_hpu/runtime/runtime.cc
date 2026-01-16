@@ -1442,6 +1442,7 @@ C_Status CudaGraphDebugDotPrint(C_CudaGraph graph,
 
 C_Status GetParameterSettersForExecGraph(C_CudaGraph graph,
                                          C_GraphHookManager *c_hook) {
+  c_hook->size = 0;
   std::cout << "GetParameterSettersForExecGraph is called." << std::endl;
   return C_SUCCESS;
 }
