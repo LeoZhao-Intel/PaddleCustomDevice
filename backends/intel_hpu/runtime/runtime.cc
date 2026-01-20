@@ -28,10 +28,13 @@
 #include <cstring>
 #include <ctime>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "habanalabs/hccl.h"
 #include "habanalabs/hccl_types.h"
@@ -691,9 +694,27 @@ class RuntimeManager {
 
 static RuntimeManager runtimeManager;
 
+struct CapturedRecipeEntry {
+  synRecipeHandle recipe = nullptr;
+  std::map<std::string, uint64_t> tensors;
+};
+
+struct C_CudaGraph_t_st {
+  C_Stream stream = nullptr;
+  synStreamHandle native_handle = nullptr;
+  std::vector<CapturedRecipeEntry> entries;
+};
+
+struct C_GraphExec_t_st {
+  C_Stream default_stream = nullptr;
+  std::vector<CapturedRecipeEntry> entries;
+};
+
 namespace {
 std::mutex g_capture_state_mutex;
 std::unordered_map<synStreamHandle, C_StreamCaptureStatus> g_capture_states;
+std::mutex g_capture_graph_mutex;
+std::unordered_map<synStreamHandle, C_CudaGraph_t_st *> g_active_capture_graphs;
 
 void SetCaptureStatus(synStreamHandle handle, C_StreamCaptureStatus status) {
   if (handle == nullptr) return;
@@ -714,6 +735,32 @@ C_StreamCaptureStatus GetCaptureStatus(synStreamHandle handle) {
   return it == g_capture_states.end() ? C_StreamCaptureStatusNone : it->second;
 }
 }  // namespace
+
+bool IsStreamCaptureActive(C_Stream stream) {
+  auto handle = reinterpret_cast<synStreamHandle>(stream);
+  return GetCaptureStatus(handle) == C_StreamCaptureStatusActive;
+}
+
+bool EnqueueCapturedRecipe(C_Stream stream,
+                           synRecipeHandle recipe,
+                           std::map<std::string, uint64_t> *tensors) {
+  if (tensors == nullptr) {
+    return false;
+  }
+  auto handle = reinterpret_cast<synStreamHandle>(stream);
+  std::lock_guard<std::mutex> guard(g_capture_graph_mutex);
+  auto it = g_active_capture_graphs.find(handle);
+  if (it == g_active_capture_graphs.end()) {
+    LOG_IF(WARNING, FLAGS_intel_hpu_runtime_debug)
+        << "No active capture session bound to stream " << handle
+        << ", executing immediately.";
+    return false;
+  }
+
+  it->second->entries.emplace_back(
+      CapturedRecipeEntry{recipe, std::move(*tensors)});
+  return true;
+}
 
 C_Status Init() {
   synStatus status = synInitialize();
@@ -1363,6 +1410,18 @@ C_Status CudaStreamBeginCapture(const C_Device device,
                                 C_StreamCaptureMode mode) {
   std::cout << "CudaStreamBeginCapture is called." << std::endl;
   auto handle = reinterpret_cast<synStreamHandle>(stream);
+  {
+    std::lock_guard<std::mutex> guard(g_capture_graph_mutex);
+    auto it = g_active_capture_graphs.find(handle);
+    if (it != g_active_capture_graphs.end()) {
+      delete it->second;
+      g_active_capture_graphs.erase(it);
+    }
+    auto *graph = new C_CudaGraph_t_st();
+    graph->stream = stream;
+    graph->native_handle = handle;
+    g_active_capture_graphs[handle] = graph;
+  }
   SetCaptureStatus(handle, C_StreamCaptureStatusActive);
   return C_SUCCESS;
 }
@@ -1373,6 +1432,20 @@ C_Status CudaStreamEndCaptrue(const C_Device device,
   std::cout << "CudaStreamEndCaptrue is called." << std::endl;
   auto handle = reinterpret_cast<synStreamHandle>(stream);
   SetCaptureStatus(handle, C_StreamCaptureStatusNone);
+  C_CudaGraph graph = nullptr;
+  {
+    std::lock_guard<std::mutex> guard(g_capture_graph_mutex);
+    auto it = g_active_capture_graphs.find(handle);
+    if (it != g_active_capture_graphs.end()) {
+      graph = reinterpret_cast<C_CudaGraph>(it->second);
+      g_active_capture_graphs.erase(it);
+    }
+  }
+  if (pGraph != nullptr) {
+    *pGraph = graph;
+  } else if (graph != nullptr) {
+    delete reinterpret_cast<C_CudaGraph_t_st *>(graph);
+  }
   return C_SUCCESS;
 }
 
@@ -1380,6 +1453,10 @@ C_Status CudaGraphGetNodes(C_CudaGraph graph,
                            C_CudaGraphNode *pNode,
                            size_t *numNodes) {
   std::cout << "CudaGraphGetNodes is called." << std::endl;
+  if (numNodes != nullptr) {
+    auto *graph_impl = reinterpret_cast<C_CudaGraph_t_st *>(graph);
+    *numNodes = graph_impl == nullptr ? 0 : graph_impl->entries.size();
+  }
   return C_SUCCESS;
 }
 
@@ -1387,16 +1464,37 @@ C_Status CudaGraphLaunch(const C_Device device,
                          C_GraphExec exec,
                          C_Stream stream) {
   std::cout << "CudaGraphLaunch is called." << std::endl;
+  auto *exec_impl = reinterpret_cast<C_GraphExec_t_st *>(exec);
+  if (exec_impl == nullptr) {
+    return C_SUCCESS;
+  }
+
+  C_Stream launch_stream =
+      stream != nullptr ? stream : exec_impl->default_stream;
+  PD_CHECK(launch_stream != nullptr,
+           "[RUNTIME] CudaGraphLaunch() invalid stream: exec default=%p,"
+           " provided=%p",
+           exec_impl->default_stream,
+           stream);
+
+  for (auto &entry : exec_impl->entries) {
+    RecipeRunner runner(entry.recipe);
+    runner.Run(launch_stream, entry.tensors);
+  }
   return C_SUCCESS;
 }
 
 C_Status CudaGraphDestroy(C_CudaGraph graph) {
   std::cout << "CudaGraphDestroy is called." << std::endl;
+  auto *graph_impl = reinterpret_cast<C_CudaGraph_t_st *>(graph);
+  delete graph_impl;
   return C_SUCCESS;
 }
 
 C_Status CudaGraphExecDestroy(C_GraphExec exec) {
   std::cout << "CudaGraphExecDestroy is called." << std::endl;
+  auto *exec_impl = reinterpret_cast<C_GraphExec_t_st *>(exec);
+  delete exec_impl;
   return C_SUCCESS;
 }
 
@@ -1406,6 +1504,18 @@ C_Status CudaGraphInstantiate(C_GraphExec *pExec,
                               char *pLogBuffer,
                               size_t bufferSize) {
   std::cout << "CudaGraphInstantiate is called." << std::endl;
+  if (pExec == nullptr || pGraph == nullptr || *pGraph == nullptr) {
+    if (pExec != nullptr) {
+      *pExec = nullptr;
+    }
+    return C_SUCCESS;
+  }
+
+  auto *graph_impl = reinterpret_cast<C_CudaGraph_t_st *>(*pGraph);
+  auto *exec_impl = new C_GraphExec_t_st();
+  exec_impl->default_stream = graph_impl->stream;
+  exec_impl->entries = graph_impl->entries;
+  *pExec = reinterpret_cast<C_GraphExec>(exec_impl);
   return C_SUCCESS;
 }
 

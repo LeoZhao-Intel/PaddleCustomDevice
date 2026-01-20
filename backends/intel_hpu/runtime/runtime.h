@@ -14,7 +14,11 @@
 
 #pragma once
 
+#include <map>
+#include <string>
+
 #include "glog/logging.h"
+#include "habanalabs/synapse_api.h"
 #include "paddle/phi/backends/device_ext.h"
 #include "runtime/flags.h"
 #include "utils/hpu_tracer.h"
@@ -56,3 +60,9 @@ C_Status AsyncMemCpyD2H(const C_Device device,
                         void *dst,
                         const void *src,
                         size_t size);
+
+bool IsStreamCaptureActive(C_Stream stream);
+
+bool EnqueueCapturedRecipe(C_Stream stream,
+                           synRecipeHandle recipe,
+                           std::map<std::string, uint64_t> *tensors);

@@ -32,6 +32,7 @@
 #include "paddle/phi/backends/device_ext.h"
 #include "paddle/phi/common/type_traits.h"
 #include "paddle/phi/extension.h"
+#include "runtime/runtime.h"
 
 #define ENABLE_ASYNC_RUN
 
@@ -159,6 +160,10 @@ class RecipeRunner {
                          uint32_t totalNumOfTensors);
 #ifdef ENABLE_ASYNC_RUN
   void Run(C_Stream stream, std::map<std::string, uint64_t> tensors) {
+    if (IsStreamCaptureActive(stream) &&
+        EnqueueCapturedRecipe(stream, recipeHandle_, &tensors)) {
+      return;
+    }
     synRecipeHandle recipehandle = this->recipeHandle_;
     auto future = GlobalWorkStreamExecutor::instance().async(
         reinterpret_cast<synStreamHandle>(stream),
@@ -167,7 +172,7 @@ class RecipeRunner {
         });
   }
 #else
-  void Run(C_Stream stream, const std::map<std::string, uint64_t>& tensors);
+  void Run(C_Stream stream, std::map<std::string, uint64_t> tensors);
 #endif
 
  protected:

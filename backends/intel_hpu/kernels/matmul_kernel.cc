@@ -135,8 +135,9 @@ void MatmulKernel(const Context& dev_ctx,
   tensors["x"] = reinterpret_cast<uint64_t>(x.data<T>());
   tensors["y"] = reinterpret_cast<uint64_t>(y.data<T>());
   tensors["output"] = reinterpret_cast<uint64_t>(out->data<T>());
+  auto stream = reinterpret_cast<C_Stream>(dev_ctx.stream());
   RecipeRunner runner(recipe);
-  runner.Run(reinterpret_cast<C_Stream>(dev_ctx.stream()), tensors);
+  runner.Run(stream, tensors);
 }
 
 }  // namespace custom_kernel
